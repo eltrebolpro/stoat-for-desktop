@@ -36,6 +36,10 @@ const windowIcon = nativeImage.createFromDataURL(windowIconAsset);
  * Create the main application window
  */
 export function createMainWindow() {
+  // (CLI arg --hidden or config)
+  const startHidden =
+    app.commandLine.hasSwitch("hidden") || config.startMinimisedToTray;
+
   // create the window
   mainWindow = new BrowserWindow({
     minWidth: 300,
@@ -45,6 +49,7 @@ export function createMainWindow() {
     backgroundColor: "#191919",
     frame: !config.customFrame,
     icon: windowIcon,
+    show: !startHidden,
     webPreferences: {
       // relative to `.vite/build`
       preload: join(__dirname, "preload.js"),
@@ -57,19 +62,25 @@ export function createMainWindow() {
   // hide the options
   mainWindow.setMenu(null);
 
-  // maximise the window if it was maximised before
-  if (config.windowState.isMaximised) {
-    mainWindow.maximize();
-  }
-
   // restore last position if it was moved previously
-  if(config.windowState.x > 0 || config.windowState.y > 0) {
-    mainWindow.setPosition(config.windowState.x ?? 0, config.windowState.y ?? 0);
+  if (config.windowState.x > 0 || config.windowState.y > 0) {
+    mainWindow.setPosition(
+      config.windowState.x ?? 0,
+      config.windowState.y ?? 0,
+    );
   }
 
   // restore last size if it was resized previously
-  if(config.windowState.width > 0 && config.windowState.height > 0) {
-    mainWindow.setSize(config.windowState.width ?? 1280, config.windowState.height ?? 720);
+  if (config.windowState.width > 0 && config.windowState.height > 0) {
+    mainWindow.setSize(
+      config.windowState.width ?? 1280,
+      config.windowState.height ?? 720,
+    );
+  }
+
+  // maximise the window if it was maximised before
+  if (config.windowState.isMaximised) {
+    mainWindow.maximize();
   }
 
   // load the entrypoint
@@ -105,7 +116,7 @@ export function createMainWindow() {
 
   // rebind zoom controls to be more sensible
   mainWindow.webContents.on("before-input-event", (event, input) => {
-    if (input.control && input.key === "=") {
+    if (input.control && (input.key === "=" || input.key === "+")) {
       // zoom in (+)
       event.preventDefault();
       mainWindow.webContents.setZoomLevel(
@@ -117,6 +128,16 @@ export function createMainWindow() {
       mainWindow.webContents.setZoomLevel(
         mainWindow.webContents.getZoomLevel() - 1,
       );
+    } else if (input.control && input.key === "0") {
+      // reset zoom to default.
+      event.preventDefault();
+      mainWindow.webContents.setZoomLevel(0);
+    } else if (
+      input.key === "F5" ||
+      ((input.control || input.meta) && input.key.toLowerCase() === "r")
+    ) {
+      event.preventDefault();
+      mainWindow.webContents.reload();
     }
   });
 
