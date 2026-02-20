@@ -1,6 +1,14 @@
 import { IUpdateInfo, updateElectronApp } from "update-electron-app";
 
-import { BrowserWindow, Notification, app, shell } from "electron";
+import {
+  BrowserWindow,
+  Notification,
+  app,
+  desktopCapturer,
+  ipcMain,
+  session,
+  shell,
+} from "electron";
 import started from "electron-squirrel-startup";
 
 import { autoLaunch } from "./native/autoLaunch";
@@ -42,6 +50,42 @@ if (acquiredLock) {
   app.on("ready", () => {
     // create window and application contexts
     createMainWindow();
+
+    // Set up screen share handler for Electron (getDisplayMedia doesn't work by default)
+    session.defaultSession.setDisplayMediaRequestHandler(
+      async (_request, callback) => {
+        try {
+          const sources = await desktopCapturer.getSources({
+            types: ["screen", "window"],
+            thumbnailSize: { width: 320, height: 180 },
+          });
+
+          // Send source list to renderer so user can pick
+          mainWindow.webContents.send(
+            "show-screen-picker",
+            sources.map((s) => ({
+              id: s.id,
+              name: s.name,
+              thumbnail: s.thumbnail.toDataURL(),
+            })),
+          );
+
+          // Wait for renderer to respond with selected source id (or null to cancel)
+          ipcMain.once("screen-source-selected", (_, sourceId: string | null) => {
+            if (sourceId) {
+              const source = sources.find((s) => s.id === sourceId);
+              if (source) {
+                callback({ video: source });
+                return;
+              }
+            }
+            callback({});
+          });
+        } catch {
+          callback({});
+        }
+      },
+    );
 
     // enable auto start on Windows and MacOS
     if (config.firstLaunch) {
